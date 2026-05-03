@@ -52,8 +52,13 @@
     "wrangler": "^4.36.0"
   },
   "lint-staged": {
-    "web/admin/src/**/*.{ts,js,svelte}": [
+    "web/admin/src/**/*.{ts,js}": [
       "eslint --fix",
+      "prettier --write"
+    ],
+    "web/admin/src/**/*.svelte": [
+      "eslint --fix",
+      "stylelint --fix",
       "prettier --write"
     ],
     "web/admin/src/**/*.css": [
