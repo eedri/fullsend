@@ -15,11 +15,11 @@
 #
 # Required:
 #   agent-eval-harness — pip install from github.com/opendatahub-io/agent-eval-harness
-#   The harness scoring scripts must be available (auto-cloned on first run).
+#   The harness scoring scripts live in the eval/.agent-eval-harness submodule.
 #
 # Optional environment:
 #   GOOGLE_APPLICATION_CREDENTIALS, ANTHROPIC_VERTEX_PROJECT_ID, etc.
-#   AGENT_EVAL_HARNESS_DIR — path to agent-eval-harness clone (default: eval/.agent-eval-harness)
+#   AGENT_EVAL_HARNESS_DIR — path to agent-eval-harness checkout (default: eval/.agent-eval-harness submodule)
 set -euo pipefail
 
 AGENT="${1:?agent name required}"
@@ -40,14 +40,19 @@ if ! python3 -c "import agent_eval" 2>/dev/null; then
   exit 1
 fi
 
-# Ensure harness scoring scripts are available (clone if needed)
+# Ensure harness scoring scripts are available. The default path is a git
+# submodule at eval/.agent-eval-harness — run `git submodule update --init`
+# if it hasn't been checked out yet.
 SCORE_PY="${HARNESS_DIR}/skills/eval-run/scripts/score.py"
 if [[ ! -f "$SCORE_PY" ]]; then
-  echo "==> Cloning agent-eval-harness for scoring scripts..."
-  # Pin to a known-good commit to avoid surprise breakage from upstream changes.
-  HARNESS_REF="8e471f86ea416adef734423a2dfa46c110af027e"
-  git clone https://github.com/opendatahub-io/agent-eval-harness.git "$HARNESS_DIR"
-  git -C "$HARNESS_DIR" checkout "$HARNESS_REF" --quiet
+  if [[ -f "${EVAL_DIR}/../.gitmodules" ]] && grep -q agent-eval-harness "${EVAL_DIR}/../.gitmodules" 2>/dev/null; then
+    echo "==> Initializing agent-eval-harness submodule..."
+    git -C "${EVAL_DIR}/.." submodule update --init eval/.agent-eval-harness
+  else
+    echo "ERROR: scoring script not found: $SCORE_PY" >&2
+    echo "       Run: git submodule update --init eval/.agent-eval-harness" >&2
+    exit 1
+  fi
 fi
 
 export GH_TOKEN="${GH_TOKEN:-$(gh auth token)}"

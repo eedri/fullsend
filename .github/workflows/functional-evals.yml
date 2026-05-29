@@ -27,6 +27,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6.0.2
+        with:
+          submodules: true
 
       - uses: actions/setup-go@v5
         with:

@@ -2,3 +2,6 @@
 	path = experiments
 	url = git@github.com:fullsend-ai/experiments.git
 	branch = main
+[submodule "eval/.agent-eval-harness"]
+	path = eval/.agent-eval-harness
+	url = https://github.com/opendatahub-io/agent-eval-harness.git

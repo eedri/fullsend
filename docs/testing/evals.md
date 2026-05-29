@@ -28,6 +28,10 @@ sandbox, and writes captured fixture state to the output directory. The harness
 handles everything else — iterating cases, invoking judges, computing scores,
 and enforcing thresholds.
 
+The harness is vendored as a git submodule at `eval/.agent-eval-harness`.
+Dependabot keeps it updated automatically. After cloning, run
+`git submodule update --init` to check it out.
+
 When adding eval capabilities (new judge types, dataset generation, regression
 detection), check whether agent-eval-harness already supports it or can be
 extended upstream before building something fullsend-specific.
