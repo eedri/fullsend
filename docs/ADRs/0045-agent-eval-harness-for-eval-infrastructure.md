@@ -67,3 +67,7 @@ agent-eval-harness over building fullsend-specific tooling.
   have already done this once (issue #59).
 - Future prompt evals (layer 2 in the test pyramid) can reuse the same
   harness with a different runner, keeping eval infrastructure unified.
+- This decision, like any ADR, can be reversed or superseded. If we find a
+  better framework or discover that agent-eval-harness limits us in practice,
+  we can switch. The purpose of this ADR is to drive consistency for the
+  foreseeable future, not to lock us in permanently.

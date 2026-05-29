@@ -97,9 +97,13 @@ github_create_repo() {
   gh repo create "$EPHEMERAL_REPO" --public --description "Ephemeral eval repo (auto-deleted)" >&2
   echo "Created repo: $EPHEMERAL_REPO"
 
-  # Clone and configure git to use GH_TOKEN for HTTPS push
+  # Clone and push using GH_TOKEN without persisting it in .git/config.
+  # The credential helper reads GH_TOKEN from the environment at runtime.
   TARGET_DIR=$(mktemp -d)
-  git clone "https://x-access-token:${GH_TOKEN}@github.com/${EPHEMERAL_REPO}.git" "$TARGET_DIR"
+  GH_CRED_HELPER='!f(){ echo "password=${GH_TOKEN}"; };f'
+  git -c "credential.helper=${GH_CRED_HELPER}" \
+    clone "https://x-access-token@github.com/${EPHEMERAL_REPO}.git" "$TARGET_DIR"
+  git -C "$TARGET_DIR" config credential.helper "${GH_CRED_HELPER}"
 
   if [[ -d "${CASE_DIR}/repo" ]]; then
     # Copy test case repo contents into the clone
@@ -134,9 +138,9 @@ github_create_issue() {
   url=$(gh issue create \
     --repo "$EPHEMERAL_REPO" \
     --title "$FIXTURE_TITLE" \
-    --body "$FIXTURE_BODY" 2>&1)
+    --body "$FIXTURE_BODY")
   FIXTURE_URL="$url"
-  FIXTURE_NUMBER=$(echo "$url" | grep -oP '/issues/\K[0-9]+')
+  FIXTURE_NUMBER="${url##*/}"
   echo "Created issue: $FIXTURE_URL"
 }
 
@@ -155,9 +159,8 @@ github_create_pr() {
   for i in $(seq 0 $((file_count - 1))); do
     local path content
     path=$(echo "$FIXTURE_FILES" | yq -r ".[$i].path")
-    content=$(echo "$FIXTURE_FILES" | yq -r ".[$i].content")
     mkdir -p "$TARGET_DIR/$(dirname "$path")"
-    echo "$content" > "$TARGET_DIR/$path"
+    echo "$FIXTURE_FILES" | yq -r ".[$i].content" > "$TARGET_DIR/$path"
   done
 
   git -C "$TARGET_DIR" add -A
@@ -170,9 +173,9 @@ github_create_pr() {
     --base "$FIXTURE_BASE" \
     --head "$PR_BRANCH" \
     --title "$FIXTURE_TITLE" \
-    --body "$FIXTURE_BODY" 2>&1)
+    --body "$FIXTURE_BODY")
   FIXTURE_URL="$url"
-  FIXTURE_NUMBER=$(echo "$url" | grep -oP '/pull/\K[0-9]+')
+  FIXTURE_NUMBER="${url##*/}"
   echo "Created PR: $FIXTURE_URL"
 }
 
@@ -294,6 +297,7 @@ create_fixture
 
 # 3. Build the env file for fullsend run
 ENV_FILE="${OUTPUT_DIR}/.eval-env"
+install -m 0600 /dev/null "$ENV_FILE"
 {
   echo "GH_TOKEN=${GH_TOKEN}"
   echo "PUSH_TOKEN=${GH_TOKEN}"
@@ -314,13 +318,20 @@ ENV_FILE="${OUTPUT_DIR}/.eval-env"
 # 4. Run fullsend with full harness (pre + post scripts)
 echo "--- Run ---"
 FULLSEND_BIN="$(command -v fullsend)"
+rc=0
 fullsend run "$AGENT" \
   --fullsend-dir "${FULLSEND_DIR}" \
   --target-repo "$TARGET_DIR" \
   --env-file "$ENV_FILE" \
   --output-dir "$OUTPUT_DIR" \
   --fullsend-binary "$FULLSEND_BIN" \
-  || echo "WARNING: fullsend run exited with status $?"
+  || rc=$?
+if [[ $rc -ne 0 ]]; then
+  echo "WARNING: fullsend run exited with status $rc"
+fi
+
+# Remove env file to prevent secrets from being uploaded as artifacts
+rm -f "$ENV_FILE"
 
 # 5. Capture fixture state for judges
 echo "--- Capture ---"

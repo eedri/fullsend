@@ -17,9 +17,14 @@ permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: functional-evals-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   functional-evals:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6.0.2
 
@@ -62,7 +67,7 @@ jobs:
 
       - name: Install OpenShell CLI
         run: |
-          uv tool install openshell==${OPENSHELL_VERSION}
+          uv tool install "openshell==${OPENSHELL_VERSION}"
           openshell --version
 
       - name: Download openshell-gateway
@@ -97,7 +102,7 @@ jobs:
           if [ ! -S "${SOCKET_PATH}" ]; then
             mkdir -p "$(dirname "${SOCKET_PATH}")"
             podman system service --time=0 "unix://${SOCKET_PATH}" &
-            for i in $(seq 1 30); do
+            for _i in $(seq 1 30); do
               [ -S "${SOCKET_PATH}" ] && podman --url "unix://${SOCKET_PATH}" info >/dev/null 2>&1 && break
               sleep 1
             done
@@ -107,7 +112,8 @@ jobs:
       - name: Start openshell-gateway
         run: |
           set -euo pipefail
-          export OPENSHELL_SSH_HANDSHAKE_SECRET="ci-$(openssl rand -hex 16)"
+          OPENSHELL_SSH_HANDSHAKE_SECRET="ci-$(openssl rand -hex 16)"
+          export OPENSHELL_SSH_HANDSHAKE_SECRET
           echo "::add-mask::${OPENSHELL_SSH_HANDSHAKE_SECRET}"
           export OPENSHELL_SUPERVISOR_IMAGE="ghcr.io/nvidia/openshell/supervisor:dfd47683e7da4f1a4a8fa5d77f92d3696e6a41f9"
           "${{ runner.temp }}/openshell-gateway" \
@@ -117,7 +123,7 @@ jobs:
             --disable-tls \
             --db-url "sqlite:/tmp/gateway.db?mode=rwc" \
             >/tmp/gateway.log 2>&1 &
-          for i in $(seq 1 30); do
+          for _i in $(seq 1 30); do
             curl -sf http://127.0.0.1:8081/healthz >/dev/null 2>&1 && break
             sleep 2
           done
