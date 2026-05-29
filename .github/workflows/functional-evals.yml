@@ -1,0 +1,68 @@
+name: Functional Evals
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'eval/**'
+      - 'internal/scaffold/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'eval/**'
+      - 'internal/scaffold/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  functional-evals:
+    runs-on: ubuntu-latest
+    environment: evals
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-python@v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7.6.0
+
+      - name: Install agent-eval-harness
+        run: uv pip install --system 'agent-eval-harness[anthropic] @ git+https://github.com/opendatahub-io/agent-eval-harness.git'
+
+      - name: Install yq
+        run: |
+          curl -sSfL "https://github.com/mikefarah/yq/releases/download/v4.47.1/yq_linux_amd64" -o /usr/local/bin/yq
+          chmod +x /usr/local/bin/yq
+
+      - name: Build fullsend
+        run: make go-build
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Run functional evals
+        env:
+          EVAL_ORG: ${{ vars.EVAL_ORG }}
+          GH_TOKEN: ${{ secrets.EVAL_GH_TOKEN }}
+          ANTHROPIC_VERTEX_PROJECT_ID: ${{ vars.ANTHROPIC_VERTEX_PROJECT_ID }}
+          GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}
+          PATH: ${{ github.workspace }}/bin:$PATH
+        run: make functional-evals
+
+      - name: Upload eval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: eval/runs/
+          retention-days: 30

@@ -21,3 +21,5 @@ bin/
 .env.*
 !.env.example
 .transcripts/
+eval/runs/
+eval/.agent-eval-harness/
