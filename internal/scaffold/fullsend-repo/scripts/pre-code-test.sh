@@ -165,6 +165,62 @@ run_test_stdout() {
   echo "PASS: ${test_name}"
 }
 
+# Check stdout contains one string and does NOT contain another.
+run_test_stdout_excludes() {
+  local test_name="$1"
+  local pr_list_output="$2"
+  local expected_stdout="$3"
+  local excluded_stdout="$4"
+  local expect_exit="$5"
+  local extra_env="${6:-}"
+
+  local mock_bin
+  mock_bin="$(build_mock "${pr_list_output}")"
+
+  local env_cmd=(
+    env
+    PATH="${mock_bin}:${PATH}"
+    ISSUE_NUMBER="42"
+    REPO_FULL_NAME="test-org/test-repo"
+    GITHUB_ISSUE_URL="https://github.com/test-org/test-repo/issues/42"
+    GH_TOKEN="fake-token"
+  )
+
+  if [[ -n "${extra_env}" ]]; then
+    while IFS= read -r kv; do
+      [[ -n "${kv}" ]] && env_cmd+=("${kv}")
+    done <<< "${extra_env}"
+  fi
+
+  local exit_code=0
+  "${env_cmd[@]}" bash "${PRE_SCRIPT}" > "${TMPDIR}/stdout.log" 2>&1 || exit_code=$?
+
+  if [[ ${exit_code} -ne ${expect_exit} ]]; then
+    echo "FAIL: ${test_name} — expected exit ${expect_exit}, got ${exit_code}"
+    cat "${TMPDIR}/stdout.log"
+    FAILURES=$((FAILURES + 1))
+    return
+  fi
+
+  if ! grep -qF "${expected_stdout}" "${TMPDIR}/stdout.log" 2>/dev/null; then
+    echo "FAIL: ${test_name} — expected stdout '${expected_stdout}' not found"
+    echo "Actual stdout:"
+    cat "${TMPDIR}/stdout.log"
+    FAILURES=$((FAILURES + 1))
+    return
+  fi
+
+  if grep -qF "${excluded_stdout}" "${TMPDIR}/stdout.log" 2>/dev/null; then
+    echo "FAIL: ${test_name} — excluded stdout '${excluded_stdout}' was found"
+    echo "Actual stdout:"
+    cat "${TMPDIR}/stdout.log"
+    FAILURES=$((FAILURES + 1))
+    return
+  fi
+
+  echo "PASS: ${test_name}"
+}
+
 # --- Test cases ---
 
 # Tab character for readability.
@@ -249,6 +305,38 @@ run_test "pr-label-created" \
   "99${TAB}human-dev${TAB}https://github.com/test-org/test-repo/pull/99" \
   "gh label create pr-open --repo test-org/test-repo" \
   0
+
+# --- Regression tests: --force bypasses PR search (issue #1697) ---
+
+# COMMENT_BODY with --force must exit before PR search is reached.
+run_test_stdout_excludes "force-comment-body-no-pr-search" \
+  "99${TAB}human-dev${TAB}https://github.com/test-org/test-repo/pull/99" \
+  "Force override" \
+  "Checking for existing open PRs" \
+  0 \
+  "COMMENT_BODY=/fs-code --force"
+
+# CODE_FORCE=true must exit before PR search is reached.
+run_test_stdout_excludes "force-code-force-no-pr-search" \
+  "99${TAB}human-dev${TAB}https://github.com/test-org/test-repo/pull/99" \
+  "Force override" \
+  "Checking for existing open PRs" \
+  0 \
+  "CODE_FORCE=true"
+
+# Force check logs COMMENT_BODY value for debuggability.
+run_test_stdout "force-check-logs-comment-body" \
+  "" \
+  "Evaluating force override:" \
+  0 \
+  "COMMENT_BODY=/fs-code --force"
+
+# Without --force, PR search IS reached (no false bypass).
+run_test_stdout "no-force-reaches-pr-search" \
+  "" \
+  "Checking for existing open PRs" \
+  0 \
+  "COMMENT_BODY=/fs-code"
 
 # --- Summary ---
 
