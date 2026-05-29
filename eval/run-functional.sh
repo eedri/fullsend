@@ -44,7 +44,10 @@ fi
 SCORE_PY="${HARNESS_DIR}/skills/eval-run/scripts/score.py"
 if [[ ! -f "$SCORE_PY" ]]; then
   echo "==> Cloning agent-eval-harness for scoring scripts..."
-  git clone --depth=1 https://github.com/opendatahub-io/agent-eval-harness.git "$HARNESS_DIR"
+  # Pin to a known-good commit to avoid surprise breakage from upstream changes.
+  HARNESS_REF="8e471f86ea416adef734423a2dfa46c110af027e"
+  git clone https://github.com/opendatahub-io/agent-eval-harness.git "$HARNESS_DIR"
+  git -C "$HARNESS_DIR" checkout "$HARNESS_REF" --quiet
 fi
 
 export GH_TOKEN="${GH_TOKEN:-$(gh auth token)}"

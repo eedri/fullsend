@@ -72,10 +72,13 @@ FIXTURE_URL=""
 FIXTURE_NUMBER=""
 PR_BRANCH=""
 TARGET_DIR=""
+ENV_FILE=""
 
 cleanup() {
   local exit_code=$?
   echo "--- Teardown ---"
+  # Remove env file first to prevent secrets from surviving in artifacts.
+  [[ -n "${ENV_FILE:-}" ]] && rm -f "$ENV_FILE"
   teardown_repo
   if [[ -n "$TARGET_DIR" && -d "$TARGET_DIR" ]]; then
     rm -rf "$TARGET_DIR"
@@ -97,8 +100,9 @@ github_create_repo() {
   gh repo create "$EPHEMERAL_REPO" --public --description "Ephemeral eval repo (auto-deleted)" >&2
   echo "Created repo: $EPHEMERAL_REPO"
 
-  # Clone and push using GH_TOKEN without persisting it in .git/config.
-  # The credential helper reads GH_TOKEN from the environment at runtime.
+  # Clone and push using a credential helper that reads GH_TOKEN from the
+  # environment at runtime. The helper expression (not the token itself) is
+  # stored in .git/config; the token is only resolved when git invokes it.
   TARGET_DIR=$(mktemp -d)
   GH_CRED_HELPER='!f(){ echo "password=${GH_TOKEN}"; };f'
   git -c "credential.helper=${GH_CRED_HELPER}" \
@@ -157,7 +161,7 @@ github_create_pr() {
   local file_count
   file_count=$(echo "$FIXTURE_FILES" | yq -r 'length')
   for i in $(seq 0 $((file_count - 1))); do
-    local path content
+    local path
     path=$(echo "$FIXTURE_FILES" | yq -r ".[$i].path")
     mkdir -p "$TARGET_DIR/$(dirname "$path")"
     echo "$FIXTURE_FILES" | yq -r ".[$i].content" > "$TARGET_DIR/$path"
@@ -318,8 +322,10 @@ install -m 0600 /dev/null "$ENV_FILE"
 # 4. Run fullsend with full harness (pre + post scripts)
 echo "--- Run ---"
 FULLSEND_BIN="$(command -v fullsend)"
+# Per-case timeout (default 30 min) so a hung agent doesn't block cleanup.
+EVAL_TIMEOUT="${EVAL_TIMEOUT:-1800}"
 rc=0
-fullsend run "$AGENT" \
+timeout "$EVAL_TIMEOUT" fullsend run "$AGENT" \
   --fullsend-dir "${FULLSEND_DIR}" \
   --target-repo "$TARGET_DIR" \
   --env-file "$ENV_FILE" \

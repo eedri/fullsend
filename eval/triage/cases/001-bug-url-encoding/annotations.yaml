@@ -6,10 +6,6 @@ labels:
     - ready-to-code
     - bug
 
-comments:
-  min_count: 1
-  max_count: 1
-
 # Guidance for the LLM judge — what a good triage looks like for this case.
 triage_expectations: |
   This issue reports a 500 when logging in with a + in the email address.

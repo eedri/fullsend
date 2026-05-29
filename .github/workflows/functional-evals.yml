@@ -159,10 +159,16 @@ jobs:
           EVALS_HOST_CREDENTIALS: ${{ env.HOST_GOOGLE_APPLICATION_CREDENTIALS }}
         run: make functional-evals
 
+      - name: Scrub secrets from eval results
+        if: always()
+        run: find eval/runs/ -name '.eval-env' -delete 2>/dev/null || true
+
       - name: Upload eval results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: eval-results
-          path: eval/runs/
+          path: |
+            eval/runs/
+            !eval/runs/**/.eval-env
           retention-days: 30
