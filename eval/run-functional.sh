@@ -106,6 +106,11 @@ echo ""
 # Phase 2: Score — use agent-eval-harness score.py for judging
 # ---------------------------------------------------------------------------
 echo "=== Scoring ==="
+# Scoring runs on the host and needs the original GCP credentials, not the
+# sandbox-rewritten ones (which reference paths inside the container).
+if [[ -n "${EVALS_HOST_CREDENTIALS:-}" ]]; then
+  export GOOGLE_APPLICATION_CREDENTIALS="$EVALS_HOST_CREDENTIALS"
+fi
 AGENT_EVAL_RUNS_DIR="$RUNS_DIR" \
   python3 "$SCORE_PY" judges \
     --run-id "$RUN_ID" \

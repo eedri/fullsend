@@ -97,9 +97,9 @@ github_create_repo() {
   gh repo create "$EPHEMERAL_REPO" --public --description "Ephemeral eval repo (auto-deleted)" >&2
   echo "Created repo: $EPHEMERAL_REPO"
 
-  # Clone it and push content
+  # Clone and configure git to use GH_TOKEN for HTTPS push
   TARGET_DIR=$(mktemp -d)
-  gh repo clone "$EPHEMERAL_REPO" "$TARGET_DIR"
+  git clone "https://x-access-token:${GH_TOKEN}@github.com/${EPHEMERAL_REPO}.git" "$TARGET_DIR"
 
   if [[ -d "${CASE_DIR}/repo" ]]; then
     # Copy test case repo contents into the clone
@@ -313,11 +313,13 @@ ENV_FILE="${OUTPUT_DIR}/.eval-env"
 
 # 4. Run fullsend with full harness (pre + post scripts)
 echo "--- Run ---"
+FULLSEND_BIN="$(command -v fullsend)"
 fullsend run "$AGENT" \
   --fullsend-dir "${FULLSEND_DIR}" \
   --target-repo "$TARGET_DIR" \
   --env-file "$ENV_FILE" \
   --output-dir "$OUTPUT_DIR" \
+  --fullsend-binary "$FULLSEND_BIN" \
   || echo "WARNING: fullsend run exited with status $?"
 
 # 5. Capture fixture state for judges
