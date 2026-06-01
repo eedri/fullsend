@@ -1235,7 +1235,7 @@ func TestCommitFiles_AllNew(t *testing.T) {
 		{Path: "file1.txt", Content: []byte("content1"), Mode: "100644"},
 		{Path: "scripts/run.sh", Content: []byte("#!/bin/bash"), Mode: "100755"},
 	}
-	committed, err := client.CommitFiles(context.Background(), "org", "repo", "test commit", files)
+	committed, err := client.CommitFiles(context.Background(), "org", "repo", "test commit", files, "")
 	require.NoError(t, err)
 	assert.True(t, committed)
 }
@@ -1278,7 +1278,7 @@ func TestCommitFiles_AllUnchanged(t *testing.T) {
 	files := []forge.TreeFile{
 		{Path: "file.txt", Content: content, Mode: "100644"},
 	}
-	committed, err := client.CommitFiles(context.Background(), "org", "repo", "no-op", files)
+	committed, err := client.CommitFiles(context.Background(), "org", "repo", "no-op", files, "")
 	require.NoError(t, err)
 	assert.False(t, committed)
 }
@@ -1341,7 +1341,7 @@ func TestCommitFiles_ModeChange(t *testing.T) {
 	files := []forge.TreeFile{
 		{Path: "scripts/run.sh", Content: content, Mode: "100755"},
 	}
-	committed, err := client.CommitFiles(context.Background(), "org", "repo", "fix modes", files)
+	committed, err := client.CommitFiles(context.Background(), "org", "repo", "fix modes", files, "")
 	require.NoError(t, err)
 	assert.True(t, committed)
 	assert.True(t, treeCreated, "should create tree for mode change")
@@ -1349,7 +1349,7 @@ func TestCommitFiles_ModeChange(t *testing.T) {
 
 func TestCommitFiles_Empty(t *testing.T) {
 	client := New("token")
-	committed, err := client.CommitFiles(context.Background(), "org", "repo", "msg", nil)
+	committed, err := client.CommitFiles(context.Background(), "org", "repo", "msg", nil, "")
 	require.NoError(t, err)
 	assert.False(t, committed)
 }

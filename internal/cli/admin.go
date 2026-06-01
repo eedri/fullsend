@@ -22,12 +22,12 @@ import (
 	"github.com/fullsend-ai/fullsend/internal/config"
 	"github.com/fullsend-ai/fullsend/internal/dispatch"
 	"github.com/fullsend-ai/fullsend/internal/dispatch/gcf"
-	"github.com/fullsend-ai/fullsend/internal/mintcore"
 	"github.com/fullsend-ai/fullsend/internal/forge"
 	gh "github.com/fullsend-ai/fullsend/internal/forge/github"
 	"github.com/fullsend-ai/fullsend/internal/inference"
 	"github.com/fullsend-ai/fullsend/internal/inference/vertex"
 	"github.com/fullsend-ai/fullsend/internal/layers"
+	"github.com/fullsend-ai/fullsend/internal/mintcore"
 	"github.com/fullsend-ai/fullsend/internal/scaffold"
 	"github.com/fullsend-ai/fullsend/internal/ui"
 )
@@ -106,7 +106,6 @@ var githubOwnerPattern = regexp.MustCompile(`^[a-zA-Z0-9](-?[a-zA-Z0-9])*$`)
 // (alphanumeric, hyphens, dots, and underscores).
 var githubRepoPattern = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$`)
 
-
 // perOrgOnlyFlags are flags that only apply to per-org mode.
 var perOrgOnlyFlags = []string{
 	"enroll-all", "enroll-none",
@@ -118,9 +117,9 @@ type skipMintDispatcher struct {
 	mintURL string
 }
 
-func (d *skipMintDispatcher) Name() string                        { return "skip-mint-check" }
-func (d *skipMintDispatcher) OrgSecretNames() []string            { return nil }
-func (d *skipMintDispatcher) OrgVariableNames() []string          { return []string{"FULLSEND_MINT_URL"} }
+func (d *skipMintDispatcher) Name() string               { return "skip-mint-check" }
+func (d *skipMintDispatcher) OrgSecretNames() []string   { return nil }
+func (d *skipMintDispatcher) OrgVariableNames() []string { return []string{"FULLSEND_MINT_URL"} }
 func (d *skipMintDispatcher) StoreAgentPEM(context.Context, string, string, []byte) error {
 	return nil
 }
@@ -129,23 +128,23 @@ func (d *skipMintDispatcher) Provision(context.Context) (map[string]string, erro
 }
 
 type perRepoInstallConfig struct {
-	RepoFullName        string
-	Agents              string
-	MintURL             string
-	InferenceRegion     string
-	InferenceProject    string
+	RepoFullName         string
+	Agents               string
+	MintURL              string
+	InferenceRegion      string
+	InferenceProject     string
 	InferenceWIFProvider string
-	MintProject         string
-	MintRegion          string
-	DryRun              bool
-	SkipAppSetup        bool
-	PublicApps          bool
-	MintProvider        string
-	MintSourceDir       string
-	MintSkipDeploy      bool
-	SkipMintCheck       bool
-	AppSet              string
-	VendorBinary        bool
+	MintProject          string
+	MintRegion           string
+	DryRun               bool
+	SkipAppSetup         bool
+	PublicApps           bool
+	MintProvider         string
+	MintSourceDir        string
+	MintSkipDeploy       bool
+	SkipMintCheck        bool
+	AppSet               string
+	VendorBinary         bool
 }
 
 // wifProviderPattern validates the full WIF provider resource name format
@@ -283,23 +282,23 @@ Inference authentication:
 					perRepoMintProject = inferenceProject
 				}
 				return runPerRepoInstall(cmd.Context(), perRepoInstallConfig{
-					RepoFullName:        arg,
-					Agents:              perRepoAgents,
-					MintURL:             mintURL,
-					InferenceRegion:     inferenceRegion,
-					InferenceProject:    inferenceProject,
+					RepoFullName:         arg,
+					Agents:               perRepoAgents,
+					MintURL:              mintURL,
+					InferenceRegion:      inferenceRegion,
+					InferenceProject:     inferenceProject,
 					InferenceWIFProvider: inferenceWIFProvider,
-					MintProject:         perRepoMintProject,
-					MintRegion:          mintRegion,
-					DryRun:              dryRun,
-					SkipAppSetup:        skipAppSetup,
-					PublicApps:          publicApps,
-					MintProvider:        mintProvider,
-					MintSourceDir:       mintSourceDir,
-					MintSkipDeploy:      mintSkipDeploy,
-					SkipMintCheck:       skipMintCheck,
-					AppSet:              appSet,
-					VendorBinary:        vendorBinary,
+					MintProject:          perRepoMintProject,
+					MintRegion:           mintRegion,
+					DryRun:               dryRun,
+					SkipAppSetup:         skipAppSetup,
+					PublicApps:           publicApps,
+					MintProvider:         mintProvider,
+					MintSourceDir:        mintSourceDir,
+					MintSkipDeploy:       mintSkipDeploy,
+					SkipMintCheck:        skipMintCheck,
+					AppSet:               appSet,
+					VendorBinary:         vendorBinary,
 				})
 			}
 

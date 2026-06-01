@@ -48,21 +48,20 @@ func parseTarget(target string) (string, string, bool) {
 
 // githubSetupConfig holds configuration for the github setup command.
 type githubSetupConfig struct {
-	target              string
-	mintURL             string
-	agents              string
-	inferenceProject    string
-	inferenceRegion     string
+	target               string
+	mintURL              string
+	agents               string
+	inferenceProject     string
+	inferenceRegion      string
 	inferenceWIFProvider string
-	skipAppSetup        bool
-	publicApps          bool
-	appSet              string
-	enrollAll           bool
-	enrollNone          bool
-	vendorBinary        bool
-	dryRun              bool
+	skipAppSetup         bool
+	publicApps           bool
+	appSet               string
+	enrollAll            bool
+	enrollNone           bool
+	vendorBinary         bool
+	dryRun               bool
 }
-
 
 func newGitHubSetupCmd() *cobra.Command {
 	var cfg githubSetupConfig
@@ -280,7 +279,7 @@ func runGitHubSetupPerRepo(ctx context.Context, client forge.Client, printer *ui
 
 	printer.StepStart("Writing per-repo scaffold files")
 	committed, err := client.CommitFiles(ctx, owner, repo,
-		fmt.Sprintf("chore: initialize fullsend-%s per-repo installation", version), files)
+		fmt.Sprintf("chore: initialize fullsend-%s per-repo installation", version), files, "fullsend/config")
 	if err != nil {
 		printer.StepFail("Failed to write scaffold files")
 		return fmt.Errorf("committing scaffold files: %w", err)

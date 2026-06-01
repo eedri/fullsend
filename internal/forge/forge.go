@@ -161,11 +161,11 @@ type Client interface {
 	GetFileContent(ctx context.Context, owner, repo, path string) ([]byte, error)
 	DeleteFile(ctx context.Context, owner, repo, path, message string) error
 
-	// CommitFiles atomically commits multiple files to the repository's
-	// default branch in a single commit. It is idempotent: if all files
+	// CommitFiles atomically commits multiple files to a repository's
+	// branch in a single commit. It is idempotent: if all files
 	// already have the expected content and mode, no commit is created
-	// and it returns (false, nil).
-	CommitFiles(ctx context.Context, owner, repo, message string, files []TreeFile) (committed bool, err error)
+	// and it returns (false, nil). If branch is an empty string, the default branch is used.
+	CommitFiles(ctx context.Context, owner, repo, message string, files []TreeFile, branch string) (committed bool, err error)
 
 	// Branch operations
 	CreateBranch(ctx context.Context, owner, repo, branchName string) error

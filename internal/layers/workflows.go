@@ -3,6 +3,7 @@ package layers
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/fullsend-ai/fullsend/internal/forge"
 	"github.com/fullsend-ai/fullsend/internal/scaffold"
@@ -109,11 +110,26 @@ func (l *WorkflowsLayer) Install(ctx context.Context) error {
 
 	l.ui.StepStart("Writing scaffold files")
 	committed, err := l.client.CommitFiles(ctx, l.org, forge.ConfigRepoName,
-		fmt.Sprintf("chore: update fullsend-%s scaffold", l.version), files)
+		fmt.Sprintf("chore: update fullsend-%s scaffold", l.version), files, "")
 	if err != nil {
-		l.ui.StepFail("Failed to write scaffold files")
-		return fmt.Errorf("committing scaffold files: %w", err)
+		if strings.Contains(err.Error(), "422 Changes must be made through a pull request") {
+			committed, err = l.client.CommitFiles(ctx, l.org, forge.ConfigRepoName, "xchore: update fullsend scaffold", files, "fullsend/config")
+
+			if err != nil {
+				l.ui.StepFail("Failed to write scaffold files")
+				return fmt.Errorf("committing scaffold files: %w", err)
+			}
+
+			_, err = l.client.CreateChangeProposal(ctx, l.org, forge.ConfigRepoName, "Install/Update fullsend configuration", "This PR contains changes to the Fullsend files on this repository. It may be overly noisy. This is currently required and we are trying to make Fullsend's installation easier on the users.", "fullsend/config", "main")
+			if err != nil {
+				if !strings.Contains(err.Error(), "pull request already exists") {
+					l.ui.StepFail("Failed to write scaffold files")
+					return fmt.Errorf("failed to create PR to submit scaffold files: %w", err)
+				}
+			}
+		}
 	}
+
 	if committed {
 		l.ui.StepDone(fmt.Sprintf("Wrote %d files", len(files)))
 	} else {

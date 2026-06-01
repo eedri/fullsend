@@ -456,7 +456,7 @@ func (c *LiveClient) CreateFileOnBranch(ctx context.Context, owner, repo, branch
 func (c *LiveClient) CreateOrUpdateFile(ctx context.Context, owner, repo, path, message string, content []byte) error {
 	apiPath := fmt.Sprintf("/repos/%s/%s/contents/%s", owner, repo, path)
 
-	return c.retryOnTransient(ctx, path, func() error {
+	err := c.retryOnTransient(ctx, path, func() error {
 		// Try to get existing file for its SHA.
 		existingResp, err := c.do(ctx, http.MethodGet, apiPath, nil)
 		if err != nil {
@@ -487,6 +487,23 @@ func (c *LiveClient) CreateOrUpdateFile(ctx context.Context, owner, repo, path, 
 		resp.Body.Close()
 		return nil
 	})
+
+	if strings.Contains(err.Error(), "409") && strings.Contains(err.Error(), "pull request") {
+		fmt.Println("DEBUG:", err.Error())
+		err = c.CreateBranch(ctx, owner, repo, "fullsend/config")
+		if err != nil {
+			if !strings.Contains(err.Error(), "422 Reference already exists") {
+				return fmt.Errorf("problem creating `fullsend/config` branch: %v", err)
+			}
+		}
+
+		err = c.CreateOrUpdateFileOnBranch(ctx, owner, repo, "fullsend/config", path, message, content)
+		if err != nil {
+			return fmt.Errorf("problem commiting `config.yml` to `fullsend/config` branch: %v", err)
+		}
+	}
+
+	return err
 }
 
 // CreateOrUpdateFileOnBranch creates or updates a file on a specific branch.
@@ -599,21 +616,25 @@ func isTransientStatus(code int) bool {
 // CommitFiles atomically commits multiple files to the default branch
 // using the Git Trees/Blobs/Commits API. Returns (false, nil) when
 // all files already match the current tree (idempotent).
-func (c *LiveClient) CommitFiles(ctx context.Context, owner, repo, message string, files []forge.TreeFile) (bool, error) {
+func (c *LiveClient) CommitFiles(ctx context.Context, owner, repo, message string, files []forge.TreeFile, branch string) (bool, error) {
 	if len(files) == 0 {
 		return false, nil
 	}
 
-	// 1. Get default branch name.
-	repoResp, err := c.get(ctx, fmt.Sprintf("/repos/%s/%s", owner, repo))
-	if err != nil {
-		return false, fmt.Errorf("get repo: %w", err)
-	}
-	var repoInfo struct {
-		DefaultBranch string `json:"default_branch"`
-	}
-	if err := decodeJSON(repoResp, &repoInfo); err != nil {
-		return false, fmt.Errorf("decode repo info: %w", err)
+	if branch == "" {
+		// 1. Get default branch name.
+		repoResp, err := c.get(ctx, fmt.Sprintf("/repos/%s/%s", owner, repo))
+		if err != nil {
+			return false, fmt.Errorf("get repo: %w", err)
+		}
+		var repoInfo struct {
+			DefaultBranch string `json:"default_branch"`
+		}
+		if err := decodeJSON(repoResp, &repoInfo); err != nil {
+			return false, fmt.Errorf("decode repo info: %w", err)
+		}
+
+		branch = repoInfo.DefaultBranch
 	}
 
 	// 2. Get current commit SHA from the branch ref.
@@ -621,7 +642,7 @@ func (c *LiveClient) CommitFiles(ctx context.Context, owner, repo, message strin
 	// branch ref may not be materialized yet (async auto_init).
 	var commitSHA string
 	if err := c.retryOnTransient(ctx, "get branch ref", func() error {
-		refResp, refErr := c.get(ctx, fmt.Sprintf("/repos/%s/%s/git/ref/heads/%s", owner, repo, repoInfo.DefaultBranch))
+		refResp, refErr := c.get(ctx, fmt.Sprintf("/repos/%s/%s/git/ref/heads/%s", owner, repo, branch))
 		if refErr != nil {
 			return fmt.Errorf("get branch ref: %w", refErr)
 		}
@@ -739,7 +760,7 @@ func (c *LiveClient) CommitFiles(ctx context.Context, owner, repo, message strin
 	refPayload := map[string]string{
 		"sha": newCommit.SHA,
 	}
-	refUpdateResp, err := c.patch(ctx, fmt.Sprintf("/repos/%s/%s/git/refs/heads/%s", owner, repo, repoInfo.DefaultBranch), refPayload)
+	refUpdateResp, err := c.patch(ctx, fmt.Sprintf("/repos/%s/%s/git/refs/heads/%s", owner, repo, branch), refPayload)
 	if err != nil {
 		return false, fmt.Errorf("update ref: %w", err)
 	}

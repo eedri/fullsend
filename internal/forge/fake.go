@@ -381,7 +381,7 @@ func (f *FakeClient) DeleteFile(_ context.Context, owner, repo, path, message st
 	return nil
 }
 
-func (f *FakeClient) CommitFiles(_ context.Context, owner, repo, message string, files []TreeFile) (bool, error) {
+func (f *FakeClient) CommitFiles(_ context.Context, owner, repo, message string, files []TreeFile, branch string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
