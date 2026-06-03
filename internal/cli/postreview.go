@@ -19,6 +19,12 @@ import (
 
 const reviewMarker = "<!-- fullsend:review-agent -->"
 
+// StaleHeadExitCode is the process exit code used when a review is
+// discarded because the PR HEAD moved after the agent reviewed it.
+// post-review.sh uses this to detect stale-head outcomes and
+// re-dispatch a fresh review for the current HEAD.
+const StaleHeadExitCode = 10
+
 var hexSHARe = regexp.MustCompile(`^[0-9a-fA-F]{40}$|^[0-9a-fA-F]{64}$`)
 var reasonRe = regexp.MustCompile(`^[a-zA-Z0-9_-]*$`)
 var hunkHeaderRe = regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@`)
@@ -202,8 +208,24 @@ func checkStaleHead(ctx context.Context, client forge.Client, owner, repo string
 	return false, currentSHA, nil
 }
 
+// staleHeadError is returned when a review is discarded because the PR
+// HEAD moved after the agent reviewed it. It carries StaleHeadExitCode
+// so the CLI can exit with a distinct code that post-review.sh detects.
+type staleHeadError struct {
+	reviewedSHA string
+	currentSHA  string
+}
+
+func (e *staleHeadError) Error() string {
+	return fmt.Sprintf("review stale: reviewed %s but HEAD is now %s", e.reviewedSHA, e.currentSHA)
+}
+
+// ExitCode returns StaleHeadExitCode.
+func (e *staleHeadError) ExitCode() int { return StaleHeadExitCode }
+
 // postStaleHeadNotice posts a failure comment when the PR HEAD has moved
-// since the review was generated.
+// since the review was generated. Returns a *staleHeadError so the CLI
+// exits with StaleHeadExitCode, enabling post-review.sh to re-dispatch.
 func postStaleHeadNotice(ctx context.Context, client forge.Client, owner, repo string, pr int, reviewedSHA, currentSHA string, cfg sticky.Config, printer *ui.Printer) error {
 	body := fmt.Sprintf(`## Review
 
@@ -214,7 +236,7 @@ The review agent reviewed commit `+"`%s`"+` but the PR HEAD is now `+"`%s`"+`. T
 	if _, err := sticky.Post(ctx, client, owner, repo, pr, body, cfg, printer); err != nil {
 		return fmt.Errorf("posting stale-head notice: %w", err)
 	}
-	return fmt.Errorf("review stale: reviewed %s but HEAD is now %s", reviewedSHA, currentSHA)
+	return &staleHeadError{reviewedSHA: reviewedSHA, currentSHA: currentSHA}
 }
 
 // postFailureNotice posts a failure comment as a sticky comment.

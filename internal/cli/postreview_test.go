@@ -141,6 +141,18 @@ func TestPostStaleHeadNotice(t *testing.T) {
 	require.Len(t, comments, 1)
 	assert.Contains(t, comments[0].Body, "stale-head")
 	assert.Contains(t, comments[0].Body, "old_sha_123")
+
+	// Verify the error carries StaleHeadExitCode for post-review.sh.
+	var she *staleHeadError
+	require.ErrorAs(t, err, &she, "error should be *staleHeadError")
+	assert.Equal(t, StaleHeadExitCode, she.ExitCode())
+}
+
+func TestStaleHeadError_ExitCode(t *testing.T) {
+	err := &staleHeadError{reviewedSHA: "aaa", currentSHA: "bbb"}
+	assert.Equal(t, StaleHeadExitCode, err.ExitCode())
+	assert.Contains(t, err.Error(), "aaa")
+	assert.Contains(t, err.Error(), "bbb")
 }
 
 func TestPostFailureNotice_WithBody(t *testing.T) {
