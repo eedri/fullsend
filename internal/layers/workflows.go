@@ -84,7 +84,7 @@ func (l *WorkflowsLayer) Install(ctx context.Context) error {
 	err := scaffold.WalkFullsendRepo(func(path string, content []byte) error {
 		files = append(files, forge.TreeFile{
 			Path:    path,
-			Content: content,
+			Content: scaffold.PrependManagedHeader(path, content),
 			Mode:    scaffold.FileMode(path),
 		})
 		return nil

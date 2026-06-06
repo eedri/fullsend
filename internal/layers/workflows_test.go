@@ -73,9 +73,10 @@ func TestWorkflowsLayer_Install_TriageWorkflowContent(t *testing.T) {
 	}
 	require.NotEmpty(t, triageContent, "triage.yml should have been written")
 
-	expected, err := scaffold.FullsendRepoFile(".github/workflows/triage.yml")
+	raw, err := scaffold.FullsendRepoFile(".github/workflows/triage.yml")
 	require.NoError(t, err)
-	assert.Equal(t, string(expected), triageContent)
+	expected := string(scaffold.PrependManagedHeader(".github/workflows/triage.yml", raw))
+	assert.Equal(t, expected, triageContent)
 }
 
 func TestWorkflowsLayer_Install_RepoMaintenanceContent(t *testing.T) {
@@ -94,9 +95,29 @@ func TestWorkflowsLayer_Install_RepoMaintenanceContent(t *testing.T) {
 	}
 	require.NotEmpty(t, maintenanceContent, "repo-maintenance.yml should have been written")
 
-	expected, err := scaffold.FullsendRepoFile(".github/workflows/repo-maintenance.yml")
+	raw, err := scaffold.FullsendRepoFile(".github/workflows/repo-maintenance.yml")
 	require.NoError(t, err)
-	assert.Equal(t, string(expected), maintenanceContent)
+	expected := string(scaffold.PrependManagedHeader(".github/workflows/repo-maintenance.yml", raw))
+	assert.Equal(t, expected, maintenanceContent)
+}
+
+func TestWorkflowsLayer_Install_ManagedHeaders(t *testing.T) {
+	client := forge.NewFakeClient()
+	layer, _ := newWorkflowsLayer(t, client)
+
+	err := layer.Install(context.Background())
+	require.NoError(t, err)
+
+	for _, f := range client.CommittedFiles[0].Files {
+		header := scaffold.ManagedHeader(f.Path)
+		if header != "" {
+			assert.True(t, strings.HasPrefix(string(f.Content), header),
+				"installed file %s should start with managed header", f.Path)
+		} else {
+			assert.False(t, strings.Contains(string(f.Content), "managed by fullsend"),
+				"installed file %s should NOT have a managed header", f.Path)
+		}
+	}
 }
 
 
