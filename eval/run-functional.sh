@@ -122,4 +122,9 @@ fi
 AGENT_EVAL_RUNS_DIR="$RUNS_DIR" \
   python3 "$SCORE_PY" judges \
     --run-id "$RUN_ID" \
-    --config "$EVAL_YAML"
+    --config "$EVAL_YAML" || ERRORS=$((ERRORS + 1))
+
+if [[ "$ERRORS" -gt 0 ]]; then
+  echo "FAIL: $ERRORS error(s) detected"
+  exit 1
+fi
