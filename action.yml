@@ -43,10 +43,90 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Install fullsend CLI
+    - name: Detect install method
+      id: detect
       shell: bash
       env:
         VERSION: ${{ inputs.version }}
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: |
+        set -euo pipefail
+
+        # Use vendored binary if present (placed by fullsend admin install --vendor-fullsend-binary).
+        # Per-org mode stores it at bin/fullsend (in .fullsend config repo);
+        # per-repo mode stores it at .fullsend/bin/fullsend (in the target repo).
+        # GitHub Contents API does not preserve the executable bit, so check -f not -x.
+        VENDORED=""
+        if [[ -f "${GITHUB_WORKSPACE}/.fullsend/bin/fullsend" ]]; then
+          VENDORED="${GITHUB_WORKSPACE}/.fullsend/bin/fullsend"
+        elif [[ -f "${GITHUB_WORKSPACE}/bin/fullsend" ]]; then
+          VENDORED="${GITHUB_WORKSPACE}/bin/fullsend"
+        fi
+        if [[ -n "${VENDORED}" ]]; then
+          echo "Using vendored binary: ${VENDORED#"${GITHUB_WORKSPACE}/"}"
+          echo "install-method=vendored" >> "${GITHUB_OUTPUT}"
+          echo "vendored-path=${VENDORED}" >> "${GITHUB_OUTPUT}"
+          exit 0
+        fi
+
+        VERSION="$(printf '%s' "${VERSION:-latest}" | tr -d '[:space:]')"
+        VERSION="${VERSION:-latest}"
+
+        # Resolve 'latest' to the actual tag before checking the release API.
+        if [[ "${VERSION}" == "latest" ]]; then
+          TAG="$(curl -fsSL \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            "https://api.github.com/repos/fullsend-ai/fullsend/releases/latest" | jq -r '.tag_name')"
+          if [[ -z "${TAG}" || "${TAG}" == "null" ]]; then
+            echo "::error::Could not resolve latest release tag"
+            exit 1
+          fi
+          VERSION="${TAG}"
+        fi
+
+        if [[ "${VERSION}" == v* ]]; then
+          VERSION_URL="${VERSION}"
+          VERSION_ASSET="${VERSION#v}"
+        else
+          VERSION_URL="v${VERSION}"
+          VERSION_ASSET="${VERSION}"
+        fi
+
+        HTTP_STATUS="$(curl -sL -o /dev/null -w "%{http_code}" \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer ${GH_TOKEN}" \
+          "https://api.github.com/repos/fullsend-ai/fullsend/releases/tags/${VERSION_URL}")"
+
+        if [[ "${HTTP_STATUS}" == "200" ]]; then
+          echo "Found release ${VERSION_URL}; will download pre-built binary"
+          echo "install-method=release" >> "${GITHUB_OUTPUT}"
+          echo "version-url=${VERSION_URL}" >> "${GITHUB_OUTPUT}"
+          echo "version-asset=${VERSION_ASSET}" >> "${GITHUB_OUTPUT}"
+        else
+          echo "No release found for ${VERSION_URL} (HTTP ${HTTP_STATUS}); will build from source at ref: ${VERSION}"
+          echo "install-method=source" >> "${GITHUB_OUTPUT}"
+          echo "source-ref=${VERSION}" >> "${GITHUB_OUTPUT}"
+        fi
+
+    - name: Install vendored binary
+      if: steps.detect.outputs.install-method == 'vendored'
+      shell: bash
+      env:
+        VENDORED: ${{ steps.detect.outputs.vendored-path }}
+      run: |
+        set -euo pipefail
+        mkdir -p "${RUNNER_TEMP}/fullsend"
+        cp "${VENDORED}" "${RUNNER_TEMP}/fullsend/fullsend"
+        chmod +x "${RUNNER_TEMP}/fullsend/fullsend"
+        echo "${RUNNER_TEMP}/fullsend" >> "${GITHUB_PATH}"
+
+    - name: Download release binary
+      if: steps.detect.outputs.install-method == 'release'
+      shell: bash
+      env:
+        VERSION_URL: ${{ steps.detect.outputs.version-url }}
+        VERSION_ASSET: ${{ steps.detect.outputs.version-asset }}
         RUNNER_OS: ${{ runner.os }}
         RUNNER_ARCH: ${{ runner.arch }}
         GH_TOKEN: ${{ inputs.github_token }}
@@ -74,28 +154,6 @@ runs:
           done
         }
 
-        # Use vendored binary if present (placed by fullsend admin install --vendor-fullsend-binary).
-        # Per-org mode stores it at bin/fullsend (in .fullsend config repo);
-        # per-repo mode stores it at .fullsend/bin/fullsend (in the target repo).
-        # GitHub Contents API does not preserve the executable bit, so check -f not -x.
-        VENDORED=""
-        if [[ -f "${GITHUB_WORKSPACE}/.fullsend/bin/fullsend" ]]; then
-          VENDORED="${GITHUB_WORKSPACE}/.fullsend/bin/fullsend"
-        elif [[ -f "${GITHUB_WORKSPACE}/bin/fullsend" ]]; then
-          VENDORED="${GITHUB_WORKSPACE}/bin/fullsend"
-        fi
-        if [[ -n "${VENDORED}" ]]; then
-          echo "Using vendored fullsend binary from ${VENDORED#"${GITHUB_WORKSPACE}/"}"
-          mkdir -p "${RUNNER_TEMP}/fullsend"
-          cp "${VENDORED}" "${RUNNER_TEMP}/fullsend/fullsend"
-          chmod +x "${RUNNER_TEMP}/fullsend/fullsend"
-          echo "${RUNNER_TEMP}/fullsend" >> "${GITHUB_PATH}"
-          exit 0
-        fi
-
-        VERSION="$(printf '%s' "${VERSION:-latest}" | tr -d '[:space:]')"
-        VERSION="${VERSION:-latest}"
-
         os="$(echo "${RUNNER_OS}" | tr '[:upper:]' '[:lower:]')"
         case "${os}" in
           macos) os=darwin ;;
@@ -108,41 +166,45 @@ runs:
           arm64|aarch64) arch=arm64 ;;
         esac
 
-        if [[ "${VERSION}" == "latest" ]]; then
-          TAG="$(retry_curl -fsSL \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            "https://api.github.com/repos/fullsend-ai/fullsend/releases/latest" | jq -r '.tag_name')"
-          if [[ -z "${TAG}" || "${TAG}" == "null" ]]; then
-            echo "::error::Could not resolve latest release tag"
-            exit 1
-          fi
-          if [[ "${TAG}" == v* ]]; then
-            VERSION_URL="${TAG}"
-            VERSION_ASSET="${TAG#v}"
-          else
-            VERSION_URL="v${TAG}"
-            VERSION_ASSET="${TAG}"
-          fi
-          BASE_URL="https://github.com/fullsend-ai/fullsend/releases/download/${VERSION_URL}"
-        else
-          if [[ "${VERSION}" == v* ]]; then
-            VERSION_URL="${VERSION}"
-            VERSION_ASSET="${VERSION#v}"
-          else
-            VERSION_URL="v${VERSION}"
-            VERSION_ASSET="${VERSION}"
-          fi
-          BASE_URL="https://github.com/fullsend-ai/fullsend/releases/download/${VERSION_URL}"
-        fi
-
         ASSET_NAME="fullsend_${VERSION_ASSET}_${os}_${arch}.tar.gz"
-        URL="${BASE_URL}/${ASSET_NAME}"
+        URL="https://github.com/fullsend-ai/fullsend/releases/download/${VERSION_URL}/${ASSET_NAME}"
 
         echo "Downloading from: ${URL}"
-        retry_curl -fsSL "$URL" -o "/tmp/${ASSET_NAME}"
+        retry_curl -fsSL "${URL}" -o "/tmp/${ASSET_NAME}"
         mkdir -p "${RUNNER_TEMP}/fullsend"
         tar -xzf "/tmp/${ASSET_NAME}" -C "${RUNNER_TEMP}/fullsend"
+        echo "${RUNNER_TEMP}/fullsend" >> "${GITHUB_PATH}"
+
+    - name: Clone fullsend at ref for source build
+      if: steps.detect.outputs.install-method == 'source'
+      shell: bash
+      env:
+        SOURCE_REF: ${{ steps.detect.outputs.source-ref }}
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: |
+        set -euo pipefail
+        SRC="${RUNNER_TEMP}/fullsend-src"
+        echo "Cloning fullsend at ref: ${SOURCE_REF}"
+        git init "${SRC}"
+        git -C "${SRC}" remote add origin "https://x-access-token:${GH_TOKEN}@github.com/fullsend-ai/fullsend.git"
+        git -C "${SRC}" fetch --depth 1 origin "${SOURCE_REF}"
+        git -C "${SRC}" checkout FETCH_HEAD
+
+    - name: Set up Go for source build
+      if: steps.detect.outputs.install-method == 'source'
+      uses: actions/setup-go@v6
+      with:
+        go-version-file: ${{ runner.temp }}/fullsend-src/go.mod
+        cache-dependency-path: ${{ runner.temp }}/fullsend-src/go.sum
+
+    - name: Build fullsend from source
+      if: steps.detect.outputs.install-method == 'source'
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "${RUNNER_TEMP}/fullsend"
+        cd "${RUNNER_TEMP}/fullsend-src"
+        go build -o "${RUNNER_TEMP}/fullsend/fullsend" ./cmd/fullsend/
         echo "${RUNNER_TEMP}/fullsend" >> "${GITHUB_PATH}"
 
     - name: Print fullsend version
